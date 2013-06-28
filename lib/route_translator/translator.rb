@@ -21,6 +21,8 @@ module RouteTranslator
     end
 
     def self.translations_for(app, conditions, requirements, defaults, route_name, anchor, route_set, &block)
+      three_oh_ones = {}
+
       add_untranslated_helpers_to_controllers_and_views(route_name, route_set.named_routes.module)
       I18n.available_locales.each do |locale|
         new_conditions = conditions.dup
@@ -33,8 +35,31 @@ module RouteTranslator
         new_route_name = translate_name(route_name, locale)
         new_route_name = nil if new_route_name && route_set.named_routes.routes[new_route_name.to_sym] #TODO: Investigate this :(
         block.call(app, new_conditions, new_requirements, new_defaults, new_route_name, anchor)
+
+        # Provide 301 redirects from, for example, /es/example => /es/ejemplo:
+        I18n.available_locales.each do |other_locale|
+          next if other_locale == locale
+
+          # e.g. /en/ejemplo:
+          other_mixed_path = translate_path(conditions[:path_info], locale).sub(/^\/#{locale}/, "/#{other_locale}")
+          # e.g. /en/example:
+          other_correct_path = translate_path(conditions[:path_info], other_locale)
+          other_correct_path.sub! /\(\.:format\)$/, '' # TODO: Instead of removing this, handle such components correctly
+          other_correct_path.sub! /:([a-zA-Z_-]+)/, '%{\1}'
+          
+          # Conditional needed for something like /es/no => /en/no (identical path problem):
+          three_oh_ones[other_mixed_path] = other_correct_path if other_mixed_path != other_correct_path
+        end
       end
+
       block.call(app, conditions, requirements, defaults, route_name, anchor) if RouteTranslator.config.generate_unlocalized_routes
+      
+      # TODO: Is there a better way to add these redirects?
+      Rails.application.routes.draw do
+        three_oh_ones.each_pair do |mixed_path, correct_path|
+          match mixed_path, to: redirect(correct_path), via: :all
+        end
+      end
     end
 
     # Translates a path and adds the locale prefix.
