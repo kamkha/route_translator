@@ -44,11 +44,12 @@ module RouteTranslator
           other_mixed_path = translate_path(conditions[:path_info], locale).sub(/^\/#{locale}/, "/#{other_locale}")
           # e.g. /en/example:
           other_correct_path = translate_path(conditions[:path_info], other_locale)
+          other_correct_path_pre_sub = other_correct_path.clone
           other_correct_path.sub! /\(\.:format\)$/, '' # TODO: Instead of removing this, handle such components correctly
           other_correct_path.sub! /:([a-zA-Z_-]+)/, '%{\1}'
           
           # Conditional needed for something like /es/no => /en/no (identical path problem):
-          three_oh_ones[other_mixed_path] = other_correct_path if other_mixed_path != other_correct_path
+          three_oh_ones[other_mixed_path] = other_correct_path if other_mixed_path != other_correct_path_pre_sub
         end
       end
 
